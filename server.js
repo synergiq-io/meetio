@@ -1,0 +1,153 @@
+const express = require('express');
+const http = require('http');
+const socketIo = require('socket.io');
+const path = require('path');
+
+const app = express();
+const server = http.createServer(app);
+const io = socketIo(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
+
+// Serve static files
+app.use(express.static('public'));
+
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Handle room URLs
+app.get('/room/:roomId', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Store rooms with user info and meeting state
+const rooms = new Map();
+
+io.on('connection', (socket) => {
+  console.log('User connected:', socket.id);
+
+  socket.on('join-room', (roomId, userId, userName) => {
+    socket.join(roomId);
+    
+    // Initialize room if it doesn't exist
+    if (!rooms.has(roomId)) {
+      rooms.set(roomId, {
+        users: new Map(),
+        owner: socket.id,
+        locked: false,
+        createdAt: Date.now()
+      });
+      // Notify first user they are the owner
+      socket.emit('you-are-owner');
+    }
+
+    const room = rooms.get(roomId);
+    
+    // Add user to room with name
+    room.users.set(socket.id, { userId, userName });
+
+    // Get existing users in room
+    const existingUsers = Array.from(room.users.entries())
+      .filter(([id]) => id !== socket.id)
+      .map(([socketId, user]) => ({ socketId, userName: user.userName }));
+
+    // Send existing users to new user
+    socket.emit('existing-users', existingUsers);
+
+    // Notify other users
+    socket.to(roomId).emit('user-connected', { socketId: socket.id, userId, userName });
+    console.log(`${userName} joined room ${roomId}`);
+
+    // Handle WebRTC signaling with user names
+    socket.on('offer', (offer, targetSocketId) => {
+      const user = room.users.get(socket.id);
+      io.to(targetSocketId).emit('offer', offer, socket.id, user.userName);
+    });
+
+    socket.on('answer', (answer, targetSocketId) => {
+      io.to(targetSocketId).emit('answer', answer, socket.id);
+    });
+
+    socket.on('ice-candidate', (candidate, targetSocketId) => {
+      io.to(targetSocketId).emit('ice-candidate', candidate, socket.id);
+    });
+
+    // Handle chat messages
+    socket.on('chat-message', (message) => {
+      socket.to(roomId).emit('chat-message', message);
+    });
+
+    // Owner control: Lock meeting
+    socket.on('lock-meeting', () => {
+      if (socket.id === room.owner) {
+        room.locked = true;
+        io.to(roomId).emit('meeting-locked');
+        console.log(`Meeting ${roomId} locked by owner`);
+      }
+    });
+
+    // Owner control: Unlock meeting
+    socket.on('unlock-meeting', () => {
+      if (socket.id === room.owner) {
+        room.locked = false;
+        io.to(roomId).emit('meeting-unlocked');
+        console.log(`Meeting ${roomId} unlocked by owner`);
+      }
+    });
+
+    // Owner control: End meeting for all
+    socket.on('end-meeting', () => {
+      if (socket.id === room.owner) {
+        io.to(roomId).emit('meeting-ended');
+        console.log(`Meeting ${roomId} ended by owner`);
+        
+        // Clean up room
+        const socketsInRoom = io.sockets.adapter.rooms.get(roomId);
+        if (socketsInRoom) {
+          socketsInRoom.forEach(socketId => {
+            io.sockets.sockets.get(socketId)?.disconnect(true);
+          });
+        }
+        rooms.delete(roomId);
+      }
+    });
+
+    socket.on('disconnect', () => {
+      if (rooms.has(roomId)) {
+        const user = room.users.get(socket.id);
+        room.users.delete(socket.id);
+        
+        // If owner left and there are still users, assign new owner
+        if (socket.id === room.owner && room.users.size > 0) {
+          const newOwner = Array.from(room.users.keys())[0];
+          room.owner = newOwner;
+          io.to(newOwner).emit('you-are-owner');
+          console.log(`New owner assigned: ${newOwner}`);
+        }
+        
+        // Delete room if empty
+        if (room.users.size === 0) {
+          rooms.delete(roomId);
+        }
+        
+        if (user) {
+          socket.to(roomId).emit('user-disconnected', { 
+            socketId: socket.id, 
+            userId: user.userId, 
+            userName: user.userName 
+          });
+          console.log(`${user.userName} left room ${roomId}`);
+        }
+      }
+    });
+  });
+});
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
