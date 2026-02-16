@@ -2,6 +2,8 @@ const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const path = require('path');
+const multer = require('multer');
+const fs = require('fs');
 
 const app = express();
 const server = http.createServer(app);
@@ -12,8 +14,71 @@ const io = socketIo(server, {
   }
 });
 
+// Middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Ensure uploads directory exists
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Configure multer for presentation uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'slide-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB total
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|gif/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    if (extname) {
+      return cb(null, true);
+    }
+    cb(new Error('Only image files (JPG, PNG, GIF) are allowed!'));
+  }
+});
+
 // Serve static files
 app.use(express.static('public'));
+app.use('/uploads', express.static(uploadsDir));
+
+// Upload endpoint for presentation slides
+app.post('/api/upload-presentation', upload.array('slides', 100), (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ success: false, error: 'No files uploaded' });
+    }
+
+    const slides = req.files.map((file, index) => ({
+      url: `/uploads/${file.filename}`,
+      filename: file.filename,
+      index: index
+    }));
+
+    const notes = req.body.notes ? JSON.parse(req.body.notes) : [];
+    
+    res.json({
+      success: true,
+      presentation: {
+        slides: slides,
+        notes: notes
+      }
+    });
+  } catch (error) {
+    console.error('Upload error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -113,6 +178,42 @@ io.on('connection', (socket) => {
           });
         }
         rooms.delete(roomId);
+      }
+    });
+
+    // Presentation control: Start presentation
+    socket.on('start-presentation', (presentation) => {
+      if (socket.id === room.owner) {
+        room.presentation = presentation;
+        room.currentSlide = 0;
+        socket.to(roomId).emit('presentation-started', {
+          slides: presentation.slides,
+          currentSlide: 0,
+          totalSlides: presentation.slides.length
+        });
+        console.log(`Presentation started in room ${roomId}`);
+      }
+    });
+
+    // Presentation control: Change slide
+    socket.on('change-slide', (slideIndex) => {
+      if (socket.id === room.owner && room.presentation) {
+        room.currentSlide = slideIndex;
+        socket.to(roomId).emit('slide-changed', {
+          slideIndex: slideIndex,
+          slideUrl: room.presentation.slides[slideIndex].url
+        });
+        console.log(`Slide changed to ${slideIndex} in room ${roomId}`);
+      }
+    });
+
+    // Presentation control: End presentation
+    socket.on('end-presentation', () => {
+      if (socket.id === room.owner) {
+        delete room.presentation;
+        delete room.currentSlide;
+        socket.to(roomId).emit('presentation-ended');
+        console.log(`Presentation ended in room ${roomId}`);
       }
     });
 

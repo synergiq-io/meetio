@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Conference</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Beautiful Join Screen with Blue Theme -->
+    <div id="join-screen" class="screen active">
+        <div class="join-wrapper">
+            <div class="join-content">
+                <!-- Logo/Header -->
+                <div class="join-logo">
+                    <svg width="60" height="60" viewBox="0 0 60 60" fill="none">
+                        <circle cx="30" cy="30" r="30" fill="url(#gradient)"/>
+                        <path d="M18 21L30 30L42 21V39C42 40.6569 40.6569 42 39 42H21C19.3431 42 18 40.6569 18 39V21Z" fill="white"/>
+                        <circle cx="30" cy="27" r="4.5" fill="white"/>
+                        <defs>
+                            <linearGradient id="gradient" x1="0" y1="0" x2="60" y2="60">
+                                <stop offset="0%" stop-color="#2D8CFF"/>
+                                <stop offset="100%" stop-color="#1E5FCC"/>
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                    <h1>VideoMeet</h1>
+                </div>
+
+                <!-- Meeting Info Display (for link shares) -->
+                <div id="meeting-info" class="meeting-info hidden">
+                    <div class="info-card">
+                        <div class="info-icon">🔗</div>
+                        <div class="info-text">
+                            <p class="info-label">Joining meeting</p>
+                            <p class="info-value" id="display-room-id"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Main Join Form -->
+                <div class="join-form-card">
+                    <div class="form-group">
+                        <label for="user-name-input">Your Name</label>
+                        <input type="text" id="user-name-input" placeholder="Enter your name" autofocus>
+                    </div>
+
+                    <div class="form-group" id="room-id-group">
+                        <label for="room-id-input">Meeting ID (optional)</label>
+                        <input type="text" id="room-id-input" placeholder="Leave blank to create new meeting">
+                    </div>
+
+                    <button id="join-btn" class="btn-primary">
+                        <span id="join-btn-icon">🎥</span>
+                        <span id="join-btn-text">Join Meeting</span>
+                    </button>
+
+                    <div class="join-hint" id="join-hint">
+                        <span class="hint-icon">💡</span>
+                        <span class="hint-text">You'll be asked to allow camera and microphone access</span>
+                    </div>
+                </div>
+
+                <!-- Security Badge -->
+                <div class="security-badge">
+                    <span class="badge-icon">🔒</span>
+                    <span>End-to-end encrypted meetings</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Video Screen -->
+    <div id="video-screen" class="screen">
+        <!-- Top Bar with Meeting Controls -->
+        <div class="top-bar">
+            <div class="meeting-info-top">
+                <div class="meeting-id-badge">
+                    <span class="badge-icon">📌</span>
+                    <span id="top-room-id"></span>
+                </div>
+                <div class="meeting-timer" id="meeting-timer">00:00</div>
+            </div>
+
+            <div class="meeting-link-section">
+                <input type="text" id="meeting-link" readonly>
+                <button id="copy-link-btn" class="btn-copy-link">
+                    <span class="icon">📋</span>
+                    Copy Invitation
+                </button>
+            </div>
+
+            <!-- Owner Controls -->
+            <div class="owner-controls hidden" id="owner-controls">
+                <button id="present-powerpoint-btn" class="btn-owner-control" title="Present PowerPoint">
+                    <span class="icon">📊</span>
+                    Present
+                </button>
+                <button id="lock-meeting-btn" class="btn-owner-control" title="Lock Meeting">
+                    <span class="icon">🔓</span>
+                </button>
+                <button id="end-meeting-btn" class="btn-owner-control danger" title="End Meeting for All">
+                    <span class="icon">⛔</span>
+                    End for All
+                </button>
+            </div>
+        </div>
+
+        <!-- Video Grid -->
+        <div id="video-container">
+            <div id="videos-grid"></div>
+            
+            <!-- Meeting Ended Overlay -->
+            <div id="meeting-ended-overlay" class="meeting-ended-overlay hidden">
+                <div class="ended-content">
+                    <div class="ended-icon">📞</div>
+                    <h2>Meeting Ended</h2>
+                    <p>The host has ended this meeting for everyone</p>
+                    <button id="return-home-btn" class="btn-return">Return to Home</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat Sidebar -->
+        <div id="chat-sidebar" class="chat-sidebar">
+            <div class="chat-header">
+                <h3>Meeting Chat</h3>
+                <button id="close-chat" class="btn-close-chat">×</button>
+            </div>
+            <div id="chat-messages" class="chat-messages"></div>
+            <div class="chat-input-container">
+                <input type="text" id="chat-input" placeholder="Type a message...">
+                <button id="send-message" class="btn-send">Send</button>
+            </div>
+        </div>
+
+        <!-- Bottom Control Bar -->
+        <div class="control-bar">
+            <div class="control-group">
+                <button id="toggle-audio" class="control-btn" title="Mute/Unmute">
+                    <span class="icon">🎤</span>
+                    <span class="label">Mute</span>
+                </button>
+                <button id="toggle-video" class="control-btn" title="Start/Stop Video">
+                    <span class="icon">📹</span>
+                    <span class="label">Stop Video</span>
+                </button>
+            </div>
+
+            <div class="control-group center">
+                <button id="toggle-chat" class="control-btn" title="Chat">
+                    <span class="icon">💬</span>
+                    <span class="label">Chat</span>
+                    <span id="unread-badge" class="badge hidden">0</span>
+                </button>
+                <button id="share-screen" class="control-btn" title="Share Screen">
+                    <span class="icon">🖥️</span>
+                    <span class="label">Share Screen</span>
+                </button>
+                <button id="participants-btn" class="control-btn" title="Participants">
+                    <span class="icon">👥</span>
+                    <span class="label">Participants</span>
+                    <span id="participants-count" class="badge">1</span>
+                </button>
+            </div>
+
+            <div class="control-group">
+                <button id="leave-room" class="control-btn danger" title="Leave Meeting">
+                    <span class="icon">📞</span>
+                    <span class="label">Leave</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PowerPoint Presentation Overlay -->
+    <div id="presentation-overlay" class="presentation-overlay hidden">
+        <!-- Upload Screen (shown first) -->
+        <div id="presentation-upload" class="presentation-upload">
+            <div class="upload-card">
+                <h2>📊 Upload PowerPoint Presentation</h2>
+                <p>Upload your .pptx file to present with speaker notes</p>
+                
+                <div class="upload-area" id="upload-area">
+                    <div class="upload-icon">📁</div>
+                    <p class="upload-text">Drag & drop your PowerPoint file here</p>
+                    <p class="upload-subtext">or</p>
+                    <input type="file" id="pptx-file-input" accept=".pptx" hidden>
+                    <button class="btn-upload" id="browse-btn">Browse Files</button>
+                </div>
+                
+                <div class="upload-progress hidden" id="upload-progress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progress-fill"></div>
+                    </div>
+                    <p id="progress-text">Processing presentation...</p>
+                </div>
+                
+                <button class="btn-close-upload" id="close-upload-btn">Cancel</button>
+            </div>
+        </div>
+
+        <!-- Presenter View (host only) -->
+        <div id="presenter-view" class="presenter-view hidden">
+            <div class="presenter-top-bar">
+                <div class="presenter-info">
+                    <span class="presenter-title" id="presentation-title">Presentation</span>
+                    <span class="slide-counter" id="slide-counter">Slide 1 of 10</span>
+                </div>
+                <button class="btn-end-presentation" id="end-presentation-btn">End Presentation</button>
+            </div>
+
+            <div class="presenter-content">
+                <!-- Current Slide (large) -->
+                <div class="presenter-main">
+                    <div class="current-slide-container">
+                        <img id="current-slide-img" src="" alt="Current Slide">
+                    </div>
+                    
+                    <div class="presenter-controls">
+                        <button class="control-btn-pres" id="prev-slide-btn" title="Previous">
+                            <span class="icon">◀</span>
+                        </button>
+                        <button class="control-btn-pres" id="next-slide-btn" title="Next">
+                            <span class="icon">▶</span>
+                        </button>
+                        <span class="slide-number" id="current-slide-num">1</span>
+                    </div>
+                </div>
+
+                <!-- Speaker Notes & Next Slide Preview -->
+                <div class="presenter-sidebar">
+                    <div class="next-slide-preview">
+                        <h4>Next Slide</h4>
+                        <img id="next-slide-img" src="" alt="Next Slide">
+                    </div>
+                    
+                    <div class="speaker-notes">
+                        <h4>Speaker Notes</h4>
+                        <div class="notes-content" id="speaker-notes-content">
+                            No notes for this slide.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Audience View (participants) -->
+        <div id="audience-view" class="audience-view hidden">
+            <div class="audience-top-bar">
+                <span class="audience-title" id="audience-presentation-title">Presentation by Host</span>
+                <span class="audience-slide-counter" id="audience-slide-counter">Slide 1 of 10</span>
+            </div>
+            
+            <div class="audience-slide-container">
+                <img id="audience-slide-img" src="" alt="Presentation Slide">
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
